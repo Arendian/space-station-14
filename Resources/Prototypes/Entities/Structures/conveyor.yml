@@ -28,6 +28,8 @@
           - 0.55,-0.55
           - 0.55,0.55
           - -0.55,0.55
+        mask:
+        - TableMask
         layer:
         - Impassable
         - MidImpassable
