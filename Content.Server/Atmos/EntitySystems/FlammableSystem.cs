@@ -21,7 +21,6 @@ using Content.Shared.Timing;
 using Content.Shared.Toggleable;
 using Content.Shared.Weapons.Melee.Events;
 using Robust.Server.Audio;
-using Robust.Server.GameObjects;
 using Robust.Shared.Physics.Components;
 using Robust.Shared.Physics.Events;
 using Robust.Shared.Physics.Systems;
@@ -38,9 +37,7 @@ namespace Content.Server.Atmos.EntitySystems
         [Dependency] private readonly IgnitionSourceSystem _ignitionSourceSystem = default!;
         [Dependency] private readonly DamageableSystem _damageableSystem = default!;
         [Dependency] private readonly AlertsSystem _alertsSystem = default!;
-        [Dependency] private readonly TransformSystem _transformSystem = default!;
         [Dependency] private readonly FixtureSystem _fixture = default!;
-        [Dependency] private readonly EntityLookupSystem _lookup = default!;
         [Dependency] private readonly IAdminLogManager _adminLogger = default!;
         [Dependency] private readonly SharedAppearanceSystem _appearance = default!;
         [Dependency] private readonly SharedPopupSystem _popup = default!;
@@ -58,7 +55,6 @@ namespace Content.Server.Atmos.EntitySystems
         private float _timer;
 
         private readonly Dictionary<Entity<FlammableComponent>, float> _fireEvents = new();
-        private readonly List<EntityUid> _toRemove = new();
 
         public override void Initialize()
         {
@@ -162,10 +158,11 @@ namespace Content.Server.Atmos.EntitySystems
 
             args.Handled = true;
 
-            if (!_useDelay.BeginDelay(uid))
+            if (!TryComp(uid, out UseDelayComponent? useDelay) || !_useDelay.TryResetDelay((uid, useDelay), true))
                 return;
 
             _audio.PlayPvs(component.ExtinguishAttemptSound, uid);
+
             if (_random.Prob(component.Probability))
             {
                 AdjustFireStacks(uid, component.StackDelta, flammable);
@@ -175,6 +172,7 @@ namespace Content.Server.Atmos.EntitySystems
                 _popup.PopupEntity(Loc.GetString(component.ExtinguishFailed), uid);
             }
         }
+
         private void OnCollide(EntityUid uid, FlammableComponent flammable, ref StartCollideEvent args)
         {
             var otherUid = args.OtherEntity;
@@ -369,7 +367,7 @@ namespace Content.Server.Atmos.EntitySystems
 
             // TODO: This needs cleanup to take off the crust from TemperatureComponent and shit.
             var query = EntityQueryEnumerator<FlammableComponent, TransformComponent>();
-            while (query.MoveNext(out var uid, out var flammable, out var transform))
+            while (query.MoveNext(out var uid, out var flammable, out _))
             {
                 // Slowly dry ourselves off if wet.
                 if (flammable.FireStacks < 0)
@@ -399,7 +397,7 @@ namespace Content.Server.Atmos.EntitySystems
                     EnsureComp<IgnitionSourceComponent>(uid);
                     _ignitionSourceSystem.SetIgnited(uid);
 
-                    var damageScale = MathF.Min(flammable.FireStacks, 5);
+                    var damageScale = MathF.Min(  flammable.FireStacks, 5);
 
                     if (TryComp(uid, out TemperatureComponent? temp))
                         _temperatureSystem.ChangeHeat(uid, 12500 * damageScale, false, temp);
